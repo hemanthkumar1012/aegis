@@ -24,7 +24,7 @@ def test_create_identity(client, admin_token):
     response = client.post(
         "/api/v1/workloads/",
         headers={"Authorization": f"Bearer {admin_token}"},
-        json={"name": "test-service-1", "description": "Test", "environment": "dev"}
+        json={"name": "test-service-1", "owner": "test", "environment": "dev"}
     )
     assert response.status_code == 200
 
