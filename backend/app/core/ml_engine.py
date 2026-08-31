@@ -63,16 +63,24 @@ class MLEngine:
         }
 
     def _build_training_data(self) -> pd.DataFrame:
-        """Build historical dataset using 5-minute windows across all identities."""
+        """
+        Build historical dataset using 5-minute windows across all identities.
+        Bounded to the last 24 hours to avoid expensive model retraining on the entire DB
+        inside latency-sensitive authorization paths.
+        """
+        from datetime import UTC
         # For a real implementation we would cache this or have a background job
-        all_logs = self.db.query(AuditLog).order_by(AuditLog.timestamp.asc()).all()
+        last_time = datetime.now(UTC)
+        first_time = last_time - timedelta(hours=24)
+        
+        all_logs = self.db.query(AuditLog).filter(
+            AuditLog.timestamp >= first_time
+        ).order_by(AuditLog.timestamp.asc()).all()
+        
         if not all_logs:
             return pd.DataFrame()
             
         identities = list(set(log.identity_name for log in all_logs if log.identity_name))
-        
-        first_time = all_logs[0].timestamp
-        last_time = datetime.utcnow()
         
         windows_data = []
         for identity in identities:
@@ -95,8 +103,9 @@ class MLEngine:
             
         self.model.fit(train_df)
         
+        from datetime import UTC
         # Evaluate current window (last 5 minutes)
-        end_time = datetime.utcnow()
+        end_time = datetime.now(UTC)
         start_time = end_time - timedelta(minutes=5)
         
         current_feat_dict = self._get_windowed_features(identity_name, start_time, end_time)

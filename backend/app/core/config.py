@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     CREDENTIAL_TTL_DAYS: int = 90
     REDIS_URL: str = "redis://localhost:6379/0"
+    ADMIN_PASSWORD: str = "admin"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

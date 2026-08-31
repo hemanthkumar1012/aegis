@@ -4,10 +4,11 @@ from app.models.policy import Policy
 from app.models.workload import WorkloadIdentity
 
 class PolicyDecision:
-    def __init__(self, effect: str, reason: str, policy_name: str = None):
+    def __init__(self, effect: str, reason: str, policy_name: str = None, conditions: dict = None):
         self.effect = effect
         self.reason = reason
         self.policy_name = policy_name
+        self.conditions = conditions or {}
 
 class PolicyEngine:
     def __init__(self, db: Session):
@@ -30,20 +31,20 @@ class PolicyEngine:
         # Precedence 1: Explicit hard DENY
         for p in matching_policies:
             if p.effect == "DENY":
-                return PolicyDecision("DENY", f"Explicit DENY matched policy {p.name}", p.name)
+                return PolicyDecision("DENY", f"Explicit DENY matched policy {p.name}", p.name, p.conditions)
                 
         # Precedence 2: Explicit REQUIRE_APPROVAL
         # If there are multiple, we pick the one with highest priority to log, but the effect is the same.
         require_approval_policies = [p for p in matching_policies if p.effect == "REQUIRE_APPROVAL"]
         if require_approval_policies:
             p = sorted(require_approval_policies, key=lambda x: x.priority, reverse=True)[0]
-            return PolicyDecision("REQUIRE_APPROVAL", f"REQUIRE_APPROVAL matched policy {p.name}", p.name)
+            return PolicyDecision("REQUIRE_APPROVAL", f"REQUIRE_APPROVAL matched policy {p.name}", p.name, p.conditions)
             
         # Precedence 3: Specific ALLOW
         allow_policies = [p for p in matching_policies if p.effect == "ALLOW"]
         if allow_policies:
             p = sorted(allow_policies, key=lambda x: x.priority, reverse=True)[0]
-            return PolicyDecision("ALLOW", f"ALLOW matched policy {p.name}", p.name)
+            return PolicyDecision("ALLOW", f"ALLOW matched policy {p.name}", p.name, p.conditions)
             
         # Precedence 4: Fallback
         return PolicyDecision("DENY", "Fallback to default deny", "default-deny")

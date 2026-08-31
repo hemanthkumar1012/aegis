@@ -47,14 +47,12 @@ def init_db(db: Session) -> None:
     # 2. Create admin user
     user = db.query(User).filter(User.email == "admin@aegis.local").first()
     if not user:
-        import os
         from app.core.config import settings
         
-        pwd = "admin"
+        pwd = settings.ADMIN_PASSWORD
         if settings.ENVIRONMENT.lower() == "production":
-            pwd = os.getenv("ADMIN_PASSWORD")
-            if not pwd:
-                raise ValueError("ADMIN_PASSWORD environment variable must be set in production")
+            if pwd in ["", "admin", "changeme", "password"]:
+                raise ValueError("ADMIN_PASSWORD must be configured to a secure value in production")
                 
         user = User(
             email="admin@aegis.local",

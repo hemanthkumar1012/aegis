@@ -43,17 +43,21 @@ class AuthorizationPipeline:
             return {
                 "decision": "DENY",
                 "reason": f"Unknown tool: {tool}",
-                "policy_name": "TOOL_CHECK",
-                "risk_score": 0.0,
-                "anomaly_score": 0.0
+                "policy_id": "TOOL_CHECK",
+                "risk": 0.0,
+                "anomaly_score": 0.0,
+                "matched_permissions": [],
+                "matched_conditions": {}
             }
         if action not in tool_impl.supported_actions:
             return {
                 "decision": "DENY",
                 "reason": f"Unknown action '{action}' for tool '{tool}'",
-                "policy_name": "TOOL_CHECK",
-                "risk_score": 0.0,
-                "anomaly_score": 0.0
+                "policy_id": "TOOL_CHECK",
+                "risk": 0.0,
+                "anomaly_score": 0.0,
+                "matched_permissions": [],
+                "matched_conditions": {}
             }
 
         # 4. RBAC Permission Check
@@ -61,9 +65,11 @@ class AuthorizationPipeline:
             return {
                 "decision": "DENY",
                 "reason": "Missing RBAC permission",
-                "policy_name": "RBAC_CHECK",
-                "risk_score": 0.0,
-                "anomaly_score": 0.0
+                "policy_id": "RBAC_CHECK",
+                "risk": 0.0,
+                "anomaly_score": 0.0,
+                "matched_permissions": [],
+                "matched_conditions": {}
             }
             
         # 5. ABAC Policy Check
@@ -73,9 +79,11 @@ class AuthorizationPipeline:
             return {
                 "decision": "DENY",
                 "reason": policy_decision.reason,
-                "policy_name": policy_decision.policy_name,
-                "risk_score": 0.0,
-                "anomaly_score": 0.0
+                "policy_id": policy_decision.policy_name,
+                "risk": 0.0,
+                "anomaly_score": 0.0,
+                "matched_permissions": [f"{tool}.{action}"],
+                "matched_conditions": policy_decision.conditions if hasattr(policy_decision, "conditions") else {}
             }
             
         # 6. Rate Limit
@@ -84,9 +92,11 @@ class AuthorizationPipeline:
             return {
                 "decision": "DENY",
                 "reason": "Rate limit exceeded",
-                "policy_name": "RATE_LIMIT",
-                "risk_score": 0.0,
-                "anomaly_score": 0.0
+                "policy_id": "RATE_LIMIT",
+                "risk": 0.0,
+                "anomaly_score": 0.0,
+                "matched_permissions": [f"{tool}.{action}"],
+                "matched_conditions": {}
             }
             
         # 7. Deterministic Risk
@@ -110,12 +120,16 @@ class AuthorizationPipeline:
                 final_effect = "REQUIRE_APPROVAL"
                 final_reason = f"ML Anomaly ({anomaly_score}): {ml_eval.get('reason', '')}"
                 
+        required_perm = f"{tool}.{action}"
+        
         return {
             "decision": final_effect,
             "reason": final_reason,
-            "policy_name": policy_decision.policy_name,
-            "risk_score": risk_score,
+            "policy_id": policy_decision.policy_name,
+            "risk": risk_score,
             "anomaly_score": anomaly_score,
+            "matched_permissions": [required_perm],
+            "matched_conditions": policy_decision.conditions if hasattr(policy_decision, "conditions") else {},
             "ml_is_anomaly": ml_eval.get("is_anomaly", False),
             "ml_reason": ml_eval.get("reason", "")
         }

@@ -31,6 +31,12 @@ def review_approval(
     if approval.status != "PENDING":
         raise HTTPException(status_code=400, detail=f"Approval request is already {approval.status}")
         
+    from datetime import datetime, UTC
+    if approval.expires_at and approval.expires_at < datetime.now(UTC):
+        approval.status = "EXPIRED"
+        db.commit()
+        raise HTTPException(status_code=400, detail="Approval request has expired")
+        
     if action_in.action not in ["APPROVE", "REJECT"]:
         raise HTTPException(status_code=400, detail="Invalid action")
 

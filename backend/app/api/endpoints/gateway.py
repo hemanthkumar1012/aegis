@@ -51,8 +51,8 @@ def execute_tool(
         action=request.action,
         resource=request.resource,
         decision=result["decision"],
-        policy_applied=result["policy_name"],
-        risk_score=result["risk_score"],
+        policy_applied=result["policy_id"],
+        risk_score=result["risk"],
         anomaly_score=result["anomaly_score"],
         request_metadata=safe_params
     )
@@ -60,10 +60,11 @@ def execute_tool(
     db.commit()
     
     if result["decision"] == "DENY":
-        status_code = 429 if result["policy_name"] == "RATE_LIMIT" else 403
-        raise HTTPException(status_code=status_code, detail={"decision": "DENY", "reason": result["reason"], "policy": result["policy_name"]})
+        status_code = 429 if result["policy_id"] == "RATE_LIMIT" else 403
+        raise HTTPException(status_code=status_code, detail={"decision": "DENY", "reason": result["reason"], "policy": result["policy_id"]})
         
     elif result["decision"] == "REQUIRE_APPROVAL":
+        from datetime import datetime, timedelta, UTC
         approval = ApprovalRequest(
             request_id=req_id,
             identity_name=identity.name,
@@ -71,7 +72,8 @@ def execute_tool(
             action=request.action,
             resource=request.resource,
             parameters=request.parameters,
-            status="PENDING"
+            status="PENDING",
+            expires_at=datetime.now(UTC) + timedelta(minutes=30)
         )
         db.add(approval)
         db.commit()

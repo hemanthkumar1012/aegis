@@ -22,11 +22,13 @@ def login_access_token(
         raise HTTPException(status_code=400, detail="Inactive user")
     
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    from datetime import datetime, UTC
+    access_token = create_access_token(user.email, expires_delta=access_token_expires)
     return {
-        "access_token": create_access_token(
-            user.email, expires_delta=access_token_expires
-        ),
+        "access_token": access_token,
         "token_type": "bearer",
+        "expires_at": datetime.now(UTC) + access_token_expires,
+        "role": user.role.name if user.role else "USER"
     }
 
 @router.post("/register", response_model=UserSchema)
