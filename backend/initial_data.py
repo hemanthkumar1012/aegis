@@ -10,13 +10,48 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 def init_db(db: Session) -> None:
-    # 1. Create admin user
+    from app.models.user import Role, Permission
+
+    # 1. Create Roles and Permissions
+    admin_role = db.query(Role).filter_by(name="ADMIN").first()
+    if not admin_role:
+        admin_role = Role(name="ADMIN", description="System Administrator")
+        db.add(admin_role)
+    
+    finance_role = db.query(Role).filter_by(name="FINANCE_SERVICE_ROLE").first()
+    if not finance_role:
+        finance_role = Role(name="FINANCE_SERVICE_ROLE", description="Finance Workloads")
+        db.add(finance_role)
+        
+    support_role = db.query(Role).filter_by(name="SUPPORT_SERVICE_ROLE").first()
+    if not support_role:
+        support_role = Role(name="SUPPORT_SERVICE_ROLE", description="Support Workloads")
+        db.add(support_role)
+        
+    db.commit()
+
+    # Permissions
+    perms = ["payment.refund", "payment.read", "customer.read", "database.export", "customer.delete"]
+    for perm_name in perms:
+        p = db.query(Permission).filter_by(name=perm_name).first()
+        if not p:
+            p = Permission(name=perm_name)
+            db.add(p)
+            db.commit()
+            if perm_name.startswith("payment"):
+                finance_role.permissions.append(p)
+            elif perm_name == "customer.read":
+                support_role.permissions.append(p)
+    db.commit()
+
+    # 2. Create admin user
     user = db.query(User).filter(User.email == "admin@aegis.local").first()
     if not user:
         user = User(
             email="admin@aegis.local",
             hashed_password=get_password_hash("admin"),
             is_active=True,
+            role_id=admin_role.id
         )
         db.add(user)
         db.commit()

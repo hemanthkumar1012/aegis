@@ -7,72 +7,95 @@ from datetime import datetime, timedelta
 class MLEngine:
     def __init__(self, db: Session):
         self.db = db
+        # contamination depends on how strict we want to be
         self.model = IsolationForest(contamination=0.05, random_state=42)
         
-    def _extract_features(self, identity_name: str) -> pd.DataFrame:
-        # Extract features for a specific identity over the last hour
-        one_hour_ago = datetime.utcnow() - timedelta(hours=1)
+    def _get_windowed_features(self, identity_name: str, start_time: datetime, end_time: datetime) -> dict:
         logs = self.db.query(AuditLog).filter(
             AuditLog.identity_name == identity_name,
-            AuditLog.timestamp >= one_hour_ago
+            AuditLog.timestamp >= start_time,
+            AuditLog.timestamp < end_time
         ).all()
         
         if not logs:
-            return pd.DataFrame()
+            return None
             
         df = pd.DataFrame([{
             "tool": log.tool,
-            "action": log.action,
+            "resource": log.resource,
             "decision": log.decision
         } for log in logs])
         
-        # Aggregate features
-        features = {
-            "request_count": len(df),
-            "tool_diversity": df["tool"].nunique(),
-            "denied_rate": len(df[df["decision"] == "DENY"]) / len(df) if len(df) > 0 else 0,
+        request_count = len(df)
+        denied_count = len(df[df["decision"] == "DENY"])
+        
+        return {
+            "request_count": request_count,
+            "requests_per_minute": request_count / 5.0, # 5 min window
+            "unique_tools": df["tool"].nunique(),
+            "unique_resources": df["resource"].nunique(),
+            "denied_rate": denied_count / request_count if request_count > 0 else 0
         }
-        
-        return pd.DataFrame([features])
 
-    def detect_anomaly(self, identity_name: str) -> dict:
-        """Returns anomaly signal and score"""
-        # In a real system, we'd train on historical data across all identities or a specific baseline.
-        # For this prototype, we'll fetch all data, train, and then evaluate the specific identity.
-        
-        all_logs = self.db.query(AuditLog).all()
-        if len(all_logs) < 10:
-            return {"is_anomaly": False, "score": 0.0, "reason": "Not enough data"}
+    def _build_training_data(self) -> pd.DataFrame:
+        """Build historical dataset using 5-minute windows across all identities."""
+        # For a real implementation we would cache this or have a background job
+        all_logs = self.db.query(AuditLog).order_by(AuditLog.timestamp.asc()).all()
+        if not all_logs:
+            return pd.DataFrame()
             
-        # Group by identity to form a training set
         identities = list(set(log.identity_name for log in all_logs if log.identity_name))
         
-        train_data = []
+        first_time = all_logs[0].timestamp
+        last_time = datetime.utcnow()
+        
+        windows_data = []
         for identity in identities:
-            feat = self._extract_features(identity)
-            if not feat.empty:
-                train_data.append(feat.iloc[0])
+            curr_start = first_time
+            while curr_start < last_time:
+                curr_end = curr_start + timedelta(minutes=5)
+                feat = self._get_windowed_features(identity, curr_start, curr_end)
+                if feat:
+                    windows_data.append(feat)
+                curr_start = curr_end
                 
-        if len(train_data) < 2:
-            return {"is_anomaly": False, "score": 0.0, "reason": "Not enough diverse data"}
+        return pd.DataFrame(windows_data)
+
+    def detect_anomaly(self, identity_name: str) -> dict:
+        """Returns stable user-facing anomaly score 0-100 (higher is more anomalous)."""
+        train_df = self._build_training_data()
+        
+        if len(train_df) < 10:
+            return {"is_anomaly": False, "score": 0.0, "reason": "Not enough historical data to establish baseline"}
             
-        train_df = pd.DataFrame(train_data)
         self.model.fit(train_df)
         
-        # Evaluate current identity
-        current_feat = self._extract_features(identity_name)
-        if current_feat.empty:
-            return {"is_anomaly": False, "score": 0.0, "reason": "No recent activity"}
+        # Evaluate current window (last 5 minutes)
+        end_time = datetime.utcnow()
+        start_time = end_time - timedelta(minutes=5)
+        
+        current_feat_dict = self._get_windowed_features(identity_name, start_time, end_time)
+        if not current_feat_dict:
+            return {"is_anomaly": False, "score": 0.0, "reason": "No activity in current window"}
             
-        prediction = self.model.predict(current_feat)[0]
-        # prediction is -1 for outlier, 1 for inlier
+        current_feat = pd.DataFrame([current_feat_dict])
         
-        score_val = self.model.decision_function(current_feat)[0]
+        # Raw Isolation Forest score: Negative is anomalous, positive is normal.
+        # Scikit-learn decision_function returns roughly [-0.5, 0.5]
+        raw_score = self.model.decision_function(current_feat)[0]
         
-        is_anomaly = prediction == -1
+        # Transform [-0.5, 0.5] to [100, 0] (Invert so higher is worse)
+        # We clip raw_score to [-0.5, 0.5] then map.
+        clamped_score = max(-0.5, min(0.5, raw_score))
+        # mapped = (clamped - (-0.5)) / 1.0 -> [0, 1]
+        # invert = 1.0 - mapped -> [1, 0]
+        # scale = invert * 100
+        transformed_score = (1.0 - ((clamped_score + 0.5) / 1.0)) * 100.0
+        
+        is_anomaly = transformed_score > 75.0
         
         return {
             "is_anomaly": is_anomaly,
-            "score": float(score_val), # Lower score is more anomalous
-            "reason": "Unusual request patterns detected by ML" if is_anomaly else "Normal behavior"
+            "score": round(transformed_score, 2),
+            "reason": "Anomalous multi-factor request patterns detected" if is_anomaly else "Normal baseline behavior"
         }

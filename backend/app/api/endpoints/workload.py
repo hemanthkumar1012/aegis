@@ -54,17 +54,19 @@ def create_credential(
         raise HTTPException(status_code=404, detail="Identity not found")
     
     raw_secret = str(uuid.uuid4())
+    client_id = f"aegis_{uuid.uuid4().hex[:16]}"
     hashed_secret = get_password_hash(raw_secret)
     
     credential = IdentityCredential(
         identity_id=identity.id,
+        client_id=client_id,
         hashed_secret=hashed_secret
     )
     db.add(credential)
     db.commit()
     db.refresh(credential)
     
-    return {"client_id": identity.name, "client_secret": raw_secret}
+    return {"client_id": client_id, "client_secret": raw_secret}
 
 @router.put("/{identity_id}/suspend", response_model=WorkloadIdentitySchema)
 def suspend_identity(

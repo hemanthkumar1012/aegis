@@ -9,6 +9,6 @@ def test_ml_engine_insufficient_data():
     
     assert "is_anomaly" in result
     assert result["is_anomaly"] == False
-    assert "Not enough data" in result["reason"] or "No recent activity" in result["reason"] or "Not enough diverse data" in result["reason"]
+    assert "Not enough historical data to establish baseline" in result["reason"] or "No activity in current window" in result["reason"]
     
     db.close()

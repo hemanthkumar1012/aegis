@@ -9,6 +9,20 @@ client = TestClient(app)
 
 @pytest.fixture(scope="module")
 def admin_token():
+    db = SessionLocal()
+    from app.models.user import User, Role
+    from app.core.security import get_password_hash
+    role = db.query(Role).filter_by(name="ADMIN").first()
+    if not role:
+        role = Role(name="ADMIN")
+        db.add(role)
+        db.commit()
+    user = db.query(User).filter_by(email="admin@aegis.local").first()
+    if not user:
+        user = User(email="admin@aegis.local", hashed_password=get_password_hash("pass"), role_id=role.id)
+        db.add(user)
+        db.commit()
+    db.close()
     return create_access_token(subject="admin@aegis.local")
 
 def test_create_identity(admin_token):

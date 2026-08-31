@@ -48,4 +48,14 @@ class PolicyEngine:
             except ValueError:
                 return False
                 
+        if "environment" in conds and conds["environment"] != identity.environment:
+            return False
+            
+        if "min_trust_level" in conds:
+            levels = {"LOW": 1, "MEDIUM": 2, "HIGH": 3, "CRITICAL": 4}
+            req_lvl = levels.get(conds["min_trust_level"].upper(), 0)
+            id_lvl = levels.get(identity.trust_level.upper(), 0)
+            if id_lvl < req_lvl:
+                return False
+                
         return True

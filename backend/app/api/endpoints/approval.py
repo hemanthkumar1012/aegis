@@ -39,8 +39,14 @@ def review_approval(
         raise HTTPException(status_code=403, detail="Unauthorized to approve requests")
         
     if action_in.action == "APPROVE":
-        approval.status = "APPROVED"
-        # In a real app we might trigger a webhook or message queue here to execute the delayed task.
+        from app.api.endpoints.gateway import ToolRegistry
+        execution_result = ToolRegistry.execute(
+            approval.tool, approval.action, approval.resource, approval.parameters
+        )
+        if execution_result.get("status") == "SUCCESS":
+            approval.status = "EXECUTED"
+        else:
+            approval.status = "FAILED"
     elif action_in.action == "REJECT":
         approval.status = "REJECTED"
         
