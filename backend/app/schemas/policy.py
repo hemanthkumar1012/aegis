@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 from typing import Optional, Dict, Any
 
 class PolicyBase(BaseModel):
@@ -9,13 +9,15 @@ class PolicyBase(BaseModel):
     is_enabled: bool = True
     conditions: Dict[str, Any] = {}
 
-    @validator("effect")
+    @field_validator("effect")
+    @classmethod
     def validate_effect(cls, v):
         if v not in ["ALLOW", "DENY", "REQUIRE_APPROVAL"]:
             raise ValueError("Effect must be ALLOW, DENY, or REQUIRE_APPROVAL")
         return v
         
-    @validator("conditions")
+    @field_validator("conditions")
+    @classmethod
     def validate_conditions(cls, v):
         if not isinstance(v, dict):
             raise ValueError("Conditions must be a dictionary")
@@ -32,5 +34,4 @@ class PolicyCreate(PolicyBase):
 class Policy(PolicyBase):
     id: int
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
