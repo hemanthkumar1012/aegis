@@ -1,22 +1,10 @@
 import pytest
 from datetime import datetime, timedelta, timezone
-from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 from app.main import app
-from app.db.session import SessionLocal
 from app.models.workload import WorkloadIdentity, IdentityCredential
 from app.core.security import get_password_hash
 from app.api.deps import get_db
-
-client = TestClient(app)
-
-@pytest.fixture(scope="function")
-def db_session():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 def setup_identity_credential(db, **kwargs):
     identity_name = kwargs.pop('identity_name', 'auth-test-identity')
@@ -55,62 +43,62 @@ def setup_identity_credential(db, **kwargs):
     
     return {"client_id": client_id, "client_secret": raw_secret}
 
-def execute_gateway_request(creds):
+def execute_gateway_request(client, creds):
     return client.post(
         "/api/v1/gateway/execute",
         headers={"x-client-id": creds["client_id"], "x-client-secret": creds["client_secret"]},
         json={"identity": "auth-test-identity", "tool": "database", "action": "read", "resource": "res1"}
     )
 
-def test_valid_active_unexpired_credential(db_session):
+def test_valid_active_unexpired_credential(client, db_session):
     creds = setup_identity_credential(
         db_session, 
         is_active=True, 
         expires_at=datetime.now(timezone.utc) + timedelta(days=1)
     )
-    response = execute_gateway_request(creds)
+    response = execute_gateway_request(client, creds)
     assert response.status_code != 401
 
-def test_expired_credential(db_session):
+def test_expired_credential(client, db_session):
     creds = setup_identity_credential(
         db_session, 
         is_active=True, 
         expires_at=datetime.now(timezone.utc) - timedelta(days=1)
     )
-    response = execute_gateway_request(creds)
+    response = execute_gateway_request(client, creds)
     assert response.status_code == 401
     assert "expired" in response.json()["detail"].lower()
 
-def test_revoked_credential(db_session):
+def test_revoked_credential(client, db_session):
     creds = setup_identity_credential(
         db_session, 
         is_active=True, 
         revoked_at=datetime.now(timezone.utc)
     )
-    response = execute_gateway_request(creds)
+    response = execute_gateway_request(client, creds)
     assert response.status_code == 401
     assert "revoked" in response.json()["detail"].lower()
 
-def test_inactive_credential(db_session):
+def test_inactive_credential(client, db_session):
     creds = setup_identity_credential(
         db_session, 
         is_active=False
     )
-    response = execute_gateway_request(creds)
+    response = execute_gateway_request(client, creds)
     assert response.status_code == 401
     assert "inactive" in response.json()["detail"].lower()
 
-def test_suspended_identity(db_session):
+def test_suspended_identity(client, db_session):
     creds = setup_identity_credential(
         db_session, 
         identity_status="SUSPENDED",
         is_active=True
     )
-    response = execute_gateway_request(creds)
+    response = execute_gateway_request(client, creds)
     assert response.status_code == 403
     assert "suspended" in response.json()["detail"].lower()
 
-def test_rotated_credential_semantics(db_session):
+def test_rotated_credential_semantics(client, db_session):
     from app.models.user import User, Role
     from app.core.security import create_access_token
     
@@ -128,7 +116,7 @@ def test_rotated_credential_semantics(db_session):
 
     creds = setup_identity_credential(db_session, client_id="old_client")
     
-    resp1 = execute_gateway_request(creds)
+    resp1 = execute_gateway_request(client, creds)
     assert resp1.status_code != 401
     
     identity = db_session.query(WorkloadIdentity).filter_by(name="auth-test-identity").first()
@@ -143,44 +131,44 @@ def test_rotated_credential_semantics(db_session):
         "client_secret": rot_resp.json()["client_secret"]
     }
     
-    resp2 = execute_gateway_request(creds)
+    resp2 = execute_gateway_request(client, creds)
     assert resp2.status_code == 401
     
-    resp3 = execute_gateway_request(new_creds)
+    resp3 = execute_gateway_request(client, new_creds)
     assert resp3.status_code != 401
 
-def test_invalid_client_secret(db_session):
+def test_invalid_client_secret(client, db_session):
     creds = setup_identity_credential(db_session)
     creds["client_secret"] = "wrongsecret"
-    response = execute_gateway_request(creds)
+    response = execute_gateway_request(client, creds)
     assert response.status_code == 401
     assert "invalid" in response.json()["detail"].lower()
 
-def test_exactly_expired_credential(db_session):
+def test_exactly_expired_credential(client, db_session):
     creds = setup_identity_credential(
         db_session,
         is_active=True,
         expires_at=datetime.now(timezone.utc)
     )
-    response = execute_gateway_request(creds)
+    response = execute_gateway_request(client, creds)
     assert response.status_code == 401
     assert "expired" in response.json()["detail"].lower()
 
-def test_expired_several_minutes_ago(db_session):
+def test_expired_several_minutes_ago(client, db_session):
     creds = setup_identity_credential(
         db_session,
         is_active=True,
         expires_at=datetime.now(timezone.utc) - timedelta(minutes=5)
     )
-    response = execute_gateway_request(creds)
+    response = execute_gateway_request(client, creds)
     assert response.status_code == 401
     assert "expired" in response.json()["detail"].lower()
 
-def test_expiring_in_the_future(db_session):
+def test_expiring_in_the_future(client, db_session):
     creds = setup_identity_credential(
         db_session,
         is_active=True,
         expires_at=datetime.now(timezone.utc) + timedelta(minutes=5)
     )
-    response = execute_gateway_request(creds)
+    response = execute_gateway_request(client, creds)
     assert response.status_code != 401

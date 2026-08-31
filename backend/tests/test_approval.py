@@ -1,14 +1,10 @@
 import pytest
-from fastapi.testclient import TestClient
 from app.main import app
-from app.db.session import SessionLocal
 
-client = TestClient(app)
-
-def test_approval_flow():
+def test_approval_flow(client, db_session):
     # Setup user
     from app.models.user import User, Role
-    db = SessionLocal()
+    db = db_session
     role = db.query(Role).filter_by(name="ADMIN").first()
     if not role:
         role = Role(name="ADMIN")
@@ -72,4 +68,3 @@ def test_approval_flow():
     
     db.refresh(req)
     assert req.status == "EXECUTED"
-    db.close()

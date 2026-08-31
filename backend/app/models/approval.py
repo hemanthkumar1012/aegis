@@ -13,7 +13,7 @@ class ApprovalRequest(Base):
     resource = Column(String)
     parameters = Column(JSON, default=dict)
     
-    status = Column(String, default="PENDING") # PENDING, APPROVED, REJECTED, EXPIRED
+    status = Column(String, default="PENDING", index=True) # PENDING, APPROVED, REJECTED, EXECUTED
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     expires_at = Column(DateTime(timezone=True))

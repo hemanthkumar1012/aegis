@@ -1,8 +1,7 @@
 from app.core.ml_engine import MLEngine
-from app.db.session import SessionLocal
 
-def test_ml_engine_insufficient_data():
-    db = SessionLocal()
+def test_ml_engine_insufficient_data(db_session):
+    db = db_session
     engine = MLEngine(db)
     
     result = engine.detect_anomaly("nonexistent")
@@ -11,10 +10,9 @@ def test_ml_engine_insufficient_data():
     assert result["is_anomaly"] == False
     assert "Not enough historical data to establish baseline" in result["reason"] or "No activity in current window" in result["reason"]
     
-    db.close()
-
-def test_ml_return_format():
-    db = SessionLocal()
+    
+def test_ml_return_format(db_session):
+    db = db_session
     engine = MLEngine(db)
     
     result = engine.detect_anomaly("nonexistent")
@@ -23,4 +21,4 @@ def test_ml_return_format():
     assert "reason" in result
     assert 0.0 <= result["score"] <= 100.0
     
-    db.close()
+    

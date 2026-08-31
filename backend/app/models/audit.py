@@ -15,7 +15,7 @@ class AuditLog(Base):
     policy_applied = Column(String, nullable=True)
     risk_score = Column(Float, nullable=True)
     anomaly_score = Column(Float, nullable=True)
-    timestamp = Column(DateTime(timezone=True), server_default=func.now())
+    timestamp = Column(DateTime(timezone=True), server_default=func.now(), index=True)
     request_metadata = Column(JSON, default=dict)
 
 class SecurityEvent(Base):
@@ -26,5 +26,5 @@ class SecurityEvent(Base):
     severity = Column(String) # LOW, MEDIUM, HIGH, CRITICAL
     description = Column(String)
     source_identity = Column(String, nullable=True)
-    timestamp = Column(DateTime(timezone=True), server_default=func.now())
+    timestamp = Column(DateTime(timezone=True), server_default=func.now(), index=True)
     details = Column(JSON, default=dict)

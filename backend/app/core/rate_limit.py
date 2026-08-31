@@ -16,23 +16,28 @@ class BaseRateLimiter(ABC):
     def get_health(self) -> dict:
         pass
 
+import threading
+
 class MockRateLimiter(BaseRateLimiter):
     def __init__(self):
         self._store = {}
+        self._lock = threading.Lock()
         
     def check_limit(self, identity_name: str, limit: int = 60, window: int = 60) -> Tuple[bool, int]:
         now = time.time()
         key = f"rate_limit:{identity_name}"
-        if key not in self._store:
-            self._store[key] = []
         
-        self._store[key] = [t for t in self._store[key] if now - t < window]
-        
-        if len(self._store[key]) >= limit:
-            return False, 0
+        with self._lock:
+            if key not in self._store:
+                self._store[key] = []
             
-        self._store[key].append(now)
-        return True, limit - len(self._store[key])
+            self._store[key] = [t for t in self._store[key] if now - t < window]
+            
+            if len(self._store[key]) >= limit:
+                return False, 0
+                
+            self._store[key].append(now)
+            return True, limit - len(self._store[key])
         
     def get_health(self) -> dict:
         return {"status": "DEGRADED", "backend": "in-memory-mock", "message": "Using development fallback for rate limiting."}
@@ -44,20 +49,26 @@ class RedisRateLimiter(BaseRateLimiter):
     def check_limit(self, identity_name: str, limit: int = 60, window: int = 60) -> Tuple[bool, int]:
         key = f"rate_limit:{identity_name}"
         try:
-            current = self.r.get(key)
-            if current and int(current) >= limit:
-                return False, 0
-            
+            # Atomic check-and-increment
             pipeline = self.r.pipeline()
             pipeline.incr(key, 1)
-            pipeline.expire(key, window)
+            pipeline.ttl(key)
             result = pipeline.execute()
             
-            return True, limit - result[0]
+            current = result[0]
+            ttl = result[1]
+            
+            if current == 1 or ttl == -1:
+                self.r.expire(key, window)
+                
+            if current > limit:
+                return False, 0
+                
+            return True, limit - current
         except (redis.ConnectionError, redis.TimeoutError) as e:
             logger.error(f"Redis rate limiting failed: {e}")
-            # Fail open or closed? Typically rate limit failure degrades to mock or fail open.
-            # In a strict environment we might fail closed. For this, we'll fail open.
+            # Security gateways usually fail open for rate limits to prevent DOSing the service itself, 
+            # unless under strict denial rules.
             return True, limit
             
     def get_health(self) -> dict:

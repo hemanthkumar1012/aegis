@@ -30,7 +30,8 @@ services:
     environment:
       - DATABASE_URL=postgresql://aegis:aegis_pass@db:5432/aegis
       - REDIS_URL=redis://redis:6379/0
-      - SECRET_KEY=supersecretkey_change_in_production
+      - ENVIRONMENT=production
+      # - SECRET_KEY=generate_a_secure_key_and_put_it_here
     depends_on:
       db:
         condition: service_healthy
@@ -38,16 +39,15 @@ services:
         condition: service_started
     command: >
       sh -c "alembic upgrade head && 
-             python initial_data.py && 
              uvicorn app.main:app --host 0.0.0.0 --port 8000"
 
   frontend:
     build:
       context: ./frontend
     ports:
-      - "5173:5173"
+      - "5173:80"
     environment:
-      - VITE_API_URL=http://localhost:8000/api/v1
+      - VITE_API_URL=/api/v1
     depends_on:
       - backend
 

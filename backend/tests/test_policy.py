@@ -1,15 +1,13 @@
 import pytest
-from app.db.session import SessionLocal
 from app.core.policy_engine import PolicyEngine
 from app.models.workload import WorkloadIdentity
 from app.models.policy import Policy
 
 @pytest.fixture
-def engine():
-    db = SessionLocal()
+def engine(db_session):
+    db = db_session
     yield PolicyEngine(db)
-    db.close()
-
+    
 def test_default_deny(engine):
     identity = WorkloadIdentity(name="unknown", status="ACTIVE")
     decision = engine.evaluate(identity, "unknown_tool_test", "read", "res", {})
@@ -21,8 +19,8 @@ def test_suspended_identity(engine):
     assert decision.effect == "DENY"
     assert "suspended" in decision.reason.lower()
 
-def test_abac_amount_threshold():
-    db = SessionLocal()
+def test_abac_amount_threshold(db_session):
+    db = db_session
     engine = PolicyEngine(db)
     
     # Add a temporary policy
@@ -44,4 +42,4 @@ def test_abac_amount_threshold():
     
     db.delete(pol)
     db.commit()
-    db.close()
+    

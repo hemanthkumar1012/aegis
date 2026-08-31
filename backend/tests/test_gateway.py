@@ -1,22 +1,10 @@
 import pytest
-from fastapi.testclient import TestClient
 from app.main import app
-from app.db.session import SessionLocal
 from app.models.workload import WorkloadIdentity, IdentityCredential
 from app.core.security import get_password_hash
 from app.models.policy import Policy
 
-client = TestClient(app)
-
-@pytest.fixture(scope="module")
-def db_session():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-@pytest.fixture(scope="module")
+@pytest.fixture
 def setup_test_data(db_session):
     # Setup Role and Permissions
     from app.models.user import Role, Permission
@@ -61,7 +49,7 @@ def setup_test_data(db_session):
         
     return {"client_id_header": client_id, "client_name": client_name, "client_secret": raw_secret}
 
-def test_gateway_unauthorized(setup_test_data):
+def test_gateway_unauthorized(client, setup_test_data):
     response = client.post(
         "/api/v1/gateway/execute",
         headers={"x-client-id": "wrong", "x-client-secret": "wrong"},
@@ -69,7 +57,7 @@ def test_gateway_unauthorized(setup_test_data):
     )
     assert response.status_code == 401
 
-def test_gateway_rbac_deny(setup_test_data):
+def test_gateway_rbac_deny(client, setup_test_data):
     creds = setup_test_data
     # tool/action not in Role permissions
     response = client.post(
@@ -80,7 +68,7 @@ def test_gateway_rbac_deny(setup_test_data):
     assert response.status_code == 403
     assert "Missing RBAC" in response.json()["detail"]["reason"]
 
-def test_gateway_allow(setup_test_data):
+def test_gateway_allow(client, setup_test_data):
     creds = setup_test_data
     response = client.post(
         "/api/v1/gateway/execute",
@@ -90,9 +78,9 @@ def test_gateway_allow(setup_test_data):
     assert response.status_code == 200
     assert response.json()["decision"] == "ALLOW"
 
-def test_gateway_unknown_tool(setup_test_data):
+def test_gateway_unknown_tool(client, db_session, setup_test_data):
     creds = setup_test_data
-    db_session = SessionLocal()
+    db_session = db_session
     from app.models.user import Permission
     from app.models.workload import WorkloadIdentity
     
@@ -122,11 +110,10 @@ def test_gateway_unknown_tool(setup_test_data):
     
     db_session.delete(pol)
     db_session.commit()
-    db_session.close()
-
-def test_gateway_hard_deny(setup_test_data):
+    
+def test_gateway_hard_deny(client, db_session, setup_test_data):
     creds = setup_test_data
-    db_session = SessionLocal()
+    db_session = db_session
     from app.models.policy import Policy
     pol_deny = Policy(name="test-deny-read", effect="DENY", priority=50, conditions={"tool": "database", "action": "read", "resource": "forbidden_db"})
     db_session.add(pol_deny)
@@ -143,11 +130,10 @@ def test_gateway_hard_deny(setup_test_data):
     
     db_session.delete(pol_deny)
     db_session.commit()
-    db_session.close()
-
-def test_gateway_unknown_action(setup_test_data):
+    
+def test_gateway_unknown_action(client, db_session, setup_test_data):
     creds = setup_test_data
-    db_session = SessionLocal()
+    db_session = db_session
     from app.models.user import Permission
     from app.models.workload import WorkloadIdentity
     
@@ -170,4 +156,4 @@ def test_gateway_unknown_action(setup_test_data):
     assert response.status_code == 403
     assert "Unknown action 'fake_action'" in response.json()["detail"]["reason"]
     
-    db_session.close()
+    

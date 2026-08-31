@@ -9,7 +9,6 @@ from app.schemas.workload import GatewayRequest
 from app.core.policy_engine import PolicyEngine
 from app.models.audit import AuditLog
 from app.models.approval import ApprovalRequest
-# We will mock the risk engine and ML for now
 
 router = APIRouter()
 
