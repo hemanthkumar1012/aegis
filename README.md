@@ -1,17 +1,18 @@
-# Aegis
-**AI-Powered Runtime Security & Authorization Control Plane**
+# Aegis - AI-Powered Runtime Security & Authorization Control Plane
 
-Aegis is a modern security control plane that sits between automated workloads/software services and protected tools/resources. It provides a comprehensive suite of deterministic security controls combined with AI/ML behavioral anomaly detection to secure workload identities.
+Aegis is an experimental security control plane prototype that sits between automated workloads and protected tools. It provides identity, authorization, anomaly detection, and human-in-the-loop approval workflows.
 
-## Core Features
-- **Workload Identity Management**: Create, suspend, and rotate credentials for machine identities.
-- **Role-Based & Attribute-Based Access Control (RBAC/ABAC)**: Fine-grained permissions and contextual evaluation.
-- **Deterministic Policy Engine**: Enforces ALLOW, DENY, and REQUIRE_APPROVAL decisions with a default-deny posture.
-- **Gateway / API Security Pipeline**: Validates identity, executes policies, enforces rate limits, and assesses risk.
-- **Risk Assessment Engine**: Deterministic risk scoring based on resource sensitivity, destructive actions, and anomalies.
-- **AI/ML Anomaly Detection**: Uses `scikit-learn` (Isolation Forest) trained on historical audit events to detect anomalous behaviors.
-- **Human Approval Workflow**: High-risk or high-value operations can be flagged for human review before execution.
-- **Audit Logging**: Comprehensive structured logging for security events and authorization decisions.
+> **Note:** This is a prototype and candidate build. It is not intended for production deployment or enterprise use.
+
+## Features
+
+* **Workload/Service Identity**: Authenticate automated systems with scoped credentials.
+* **RBAC + ABAC**: Deterministic policy precedence combining role-based and attribute-based access control. (Hard DENY always wins).
+* **Tool Gateway Registry**: Secure routing to six simulated tools (`payment`, `database`, `customer`, `ticket`, `email`, `deployment`).
+* **Deterministic Risk Engine**: Assigns baseline risk scores to actions.
+* **ML Anomaly Detection**: Unsupervised ML (Isolation Forest) generates an anomaly score (0-100) based on historical request patterns.
+* **Approval Workflow**: High-risk or anomalous requests are suspended for explicit human approval via transactional state locks.
+* **Audit Trail**: Detailed logging of all gateway decisions and human approvals, with automatic credential masking.
 - **React Dashboard**: Modern, responsive control plane UI using Vite, React, TailwindCSS, and Recharts.
 
 ## Architecture

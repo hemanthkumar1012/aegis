@@ -15,9 +15,8 @@ def create_workload_identity(
     *,
     db: Session = Depends(deps.get_db),
     workload_in: WorkloadIdentityCreate,
-    current_user: User = Depends(deps.get_current_active_user),
+    current_user: User = Depends(deps.get_current_admin_user),
 ) -> Any:
-    # Need admin check here ideally. Skipping full RBAC check for simplicity of scaffolding
     identity = db.query(WorkloadIdentity).filter(WorkloadIdentity.name == workload_in.name).first()
     if identity:
         raise HTTPException(status_code=400, detail="Identity already exists.")
@@ -38,7 +37,7 @@ def create_workload_identity(
 @router.get("/", response_model=List[WorkloadIdentitySchema])
 def read_identities(
     db: Session = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_current_active_user),
+    current_user: User = Depends(deps.get_current_admin_user),
 ) -> Any:
     return db.query(WorkloadIdentity).all()
 
@@ -47,7 +46,7 @@ def create_credential(
     *,
     db: Session = Depends(deps.get_db),
     identity_id: int,
-    current_user: User = Depends(deps.get_current_active_user),
+    current_user: User = Depends(deps.get_current_admin_user),
 ) -> Any:
     identity = db.query(WorkloadIdentity).filter(WorkloadIdentity.id == identity_id).first()
     if not identity:
@@ -73,7 +72,7 @@ def suspend_identity(
     *,
     db: Session = Depends(deps.get_db),
     identity_id: int,
-    current_user: User = Depends(deps.get_current_active_user),
+    current_user: User = Depends(deps.get_current_admin_user),
 ) -> Any:
     identity = db.query(WorkloadIdentity).filter(WorkloadIdentity.id == identity_id).first()
     if not identity:
@@ -89,7 +88,7 @@ def reactivate_identity(
     *,
     db: Session = Depends(deps.get_db),
     identity_id: int,
-    current_user: User = Depends(deps.get_current_active_user),
+    current_user: User = Depends(deps.get_current_admin_user),
 ) -> Any:
     identity = db.query(WorkloadIdentity).filter(WorkloadIdentity.id == identity_id).first()
     if not identity:

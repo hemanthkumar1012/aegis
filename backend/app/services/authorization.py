@@ -36,6 +36,26 @@ class AuthorizationPipeline:
         """
         # 1. & 2. & 3. Authentication & Identity Status are done in deps.
         
+        # 3.5. Tool & Action Existence Check
+        from app.core.tools import registry as tool_registry
+        tool_impl = tool_registry._tools.get(tool)
+        if not tool_impl:
+            return {
+                "decision": "DENY",
+                "reason": f"Unknown tool: {tool}",
+                "policy_name": "TOOL_CHECK",
+                "risk_score": 0.0,
+                "anomaly_score": 0.0
+            }
+        if action not in tool_impl.supported_actions:
+            return {
+                "decision": "DENY",
+                "reason": f"Unknown action '{action}' for tool '{tool}'",
+                "policy_name": "TOOL_CHECK",
+                "risk_score": 0.0,
+                "anomaly_score": 0.0
+            }
+
         # 4. RBAC Permission Check
         if not self.check_rbac(identity, tool, action):
             return {
@@ -88,7 +108,7 @@ class AuthorizationPipeline:
                 final_reason = f"Elevated deterministic risk ({risk_score})"
             elif anomaly_score > 75:
                 final_effect = "REQUIRE_APPROVAL"
-                final_reason = "Anomalous behavior detected"
+                final_reason = f"ML Anomaly ({anomaly_score}): {ml_eval.get('reason', '')}"
                 
         return {
             "decision": final_effect,
@@ -96,4 +116,6 @@ class AuthorizationPipeline:
             "policy_name": policy_decision.policy_name,
             "risk_score": risk_score,
             "anomaly_score": anomaly_score,
+            "ml_is_anomaly": ml_eval.get("is_anomaly", False),
+            "ml_reason": ml_eval.get("reason", "")
         }

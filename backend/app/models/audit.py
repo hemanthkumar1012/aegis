@@ -14,6 +14,7 @@ class AuditLog(Base):
     decision = Column(String) # ALLOW, DENY, REQUIRE_APPROVAL
     policy_applied = Column(String, nullable=True)
     risk_score = Column(Float, nullable=True)
+    anomaly_score = Column(Float, nullable=True)
     timestamp = Column(DateTime(timezone=True), server_default=func.now())
     request_metadata = Column(JSON, default=dict)
 

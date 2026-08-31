@@ -54,6 +54,7 @@ def execute_tool(
         decision=result["decision"],
         policy_applied=result["policy_name"],
         risk_score=result["risk_score"],
+        anomaly_score=result["anomaly_score"],
         request_metadata=safe_params
     )
     db.add(audit_entry)

@@ -54,11 +54,17 @@ def review_approval(
         pipeline = AuthorizationPipeline(db)
         eval_result = pipeline.evaluate(identity, approval.tool, approval.action, approval.resource, approval.parameters)
         
-        # A REQUIRE_APPROVAL result is what got us here, but it must not be a hard DENY
+        # If the result is DENY, it must be rejected (e.g. a new block policy was added)
         if eval_result["decision"] == "DENY":
             approval.status = "REJECTED"
             db.commit()
             raise HTTPException(status_code=403, detail=f"Request now violates a hard DENY policy: {eval_result}")
+            
+        # If it returns REQUIRE_APPROVAL again (e.g. still anomalous or high risk), 
+        # we explicitly define that the existing human approval is sufficient for this exact immutable request.
+        # Since the approval record is immutable and cannot be altered, the approver's authorization holds.
+        elif eval_result["decision"] == "REQUIRE_APPROVAL":
+            pass # Existing approval is sufficient
 
         # 4. Execute
         from app.core.tools import registry as tool_registry
@@ -85,6 +91,7 @@ def review_approval(
         decision=f"APPROVAL_{action_in.action}_{approval.status}",
         policy_applied="APPROVAL_WORKFLOW",
         risk_score=0.0,
+        anomaly_score=0.0,
         request_metadata={"approver_id": current_user.id, "original_request": request_id}
     )
     db.add(audit_entry)

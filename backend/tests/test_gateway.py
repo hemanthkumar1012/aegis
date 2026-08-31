@@ -117,9 +117,8 @@ def test_gateway_unknown_tool(setup_test_data):
         json={"identity": creds["client_name"], "tool": "unknown_tool", "action": "read", "resource": "res1"}
     )
     
-    assert response.status_code == 200
-    assert response.json()["decision"] == "ALLOW"
-    assert response.json()["execution"]["status"] == "FAILED"
+    assert response.status_code == 403
+    assert "Unknown tool" in response.json()["detail"]["reason"]
     
     db_session.delete(pol)
     db_session.commit()
@@ -144,4 +143,31 @@ def test_gateway_hard_deny(setup_test_data):
     
     db_session.delete(pol_deny)
     db_session.commit()
+    db_session.close()
+
+def test_gateway_unknown_action(setup_test_data):
+    creds = setup_test_data
+    db_session = SessionLocal()
+    from app.models.user import Permission
+    from app.models.workload import WorkloadIdentity
+    
+    identity = db_session.query(WorkloadIdentity).filter_by(name=creds["client_name"]).first()
+    perm = db_session.query(Permission).filter_by(name="database.fake_action").first()
+    if not perm:
+        perm = Permission(name="database.fake_action")
+        db_session.add(perm)
+        db_session.commit()
+    if perm not in identity.role.permissions:
+        identity.role.permissions.append(perm)
+        db_session.commit()
+        
+    response = client.post(
+        "/api/v1/gateway/execute",
+        headers={"x-client-id": creds["client_id_header"], "x-client-secret": creds["client_secret"]},
+        json={"identity": creds["client_name"], "tool": "database", "action": "fake_action", "resource": "res1"}
+    )
+    
+    assert response.status_code == 403
+    assert "Unknown action 'fake_action'" in response.json()["detail"]["reason"]
+    
     db_session.close()

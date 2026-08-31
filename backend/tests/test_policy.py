@@ -12,7 +12,7 @@ def engine():
 
 def test_default_deny(engine):
     identity = WorkloadIdentity(name="unknown", status="ACTIVE")
-    decision = engine.evaluate(identity, "unknown_tool", "read", "res", {})
+    decision = engine.evaluate(identity, "unknown_tool_test", "read", "res", {})
     assert decision.effect == "DENY"
 
 def test_suspended_identity(engine):
