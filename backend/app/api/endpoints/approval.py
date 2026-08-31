@@ -30,13 +30,19 @@ def review_approval(
     if approval.status != "PENDING":
         raise HTTPException(status_code=400, detail=f"Approval request is already {approval.status}")
         
+    if action_in.action not in ["APPROVE", "REJECT"]:
+        raise HTTPException(status_code=400, detail="Invalid action")
+
+    # Prevent self-approval if we assume the approver shouldn't be the owner of the workload
+    # For now, let's just assume we check the user role. Only ADMIN or SECURITY_ADMIN can approve.
+    if current_user.role and current_user.role.name not in ["ADMIN", "SECURITY_ADMIN"]:
+        raise HTTPException(status_code=403, detail="Unauthorized to approve requests")
+        
     if action_in.action == "APPROVE":
         approval.status = "APPROVED"
         # In a real app we might trigger a webhook or message queue here to execute the delayed task.
     elif action_in.action == "REJECT":
         approval.status = "REJECTED"
-    else:
-        raise HTTPException(status_code=400, detail="Invalid action")
         
     approval.approver_id = current_user.id
     db.commit()
