@@ -26,9 +26,9 @@ def test_abac_amount_threshold():
     engine = PolicyEngine(db)
     
     # Add a temporary policy
-    pol = db.query(Policy).filter_by(name="test-amount").first()
+    pol = db.query(Policy).filter_by(name="test-amount-unique").first()
     if not pol:
-        pol = Policy(name="test-amount", effect="ALLOW", priority=500, conditions={"max_amount": 500, "tool": "payment_test"})
+        pol = Policy(name="test-amount-unique", effect="ALLOW", priority=500, conditions={"max_amount": 500, "tool": "payment_test"})
         db.add(pol)
         db.commit()
     
