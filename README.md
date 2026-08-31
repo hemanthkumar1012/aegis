@@ -12,7 +12,15 @@ Aegis is an experimental security control plane prototype that sits between auto
 * **Deterministic Risk Engine**: Assigns baseline risk scores to actions.
 * **ML Anomaly Detection**: Unsupervised ML (Isolation Forest) generates an anomaly score (0-100) based on historical request patterns.
 * **Approval Workflow**: High-risk or anomalous requests are suspended for explicit human approval via transactional state locks.
-* **Audit Trail**: Detailed logging of all gateway decisions and human approvals, with automatic credential masking.
+## Credential Lifecycle & Authentication
+
+Aegis manages machine identity credentials deterministically:
+* **Creation**: Credentials are created with an `issued_at` timestamp and an `expires_at` timestamp based on `CREDENTIAL_TTL_DAYS` (default 90 days). The plaintext secret is returned exactly once and is never stored.
+* **Expiration**: The gateway enforces strict timezone-aware expiration checks. Expired credentials instantly return a 401 Unauthorized.
+* **Rotation**: Rotating a credential instantly marks all previous active credentials as inactive (`is_active = False`) and sets `revoked_at`. A new single active credential is created.
+* **Revocation**: Any credential with a non-null `revoked_at` timestamp is hard-blocked (401), regardless of the `is_active` flag.
+
+All lifecycle transitions (creation, rotation, expiration, and invalid attempts) generate sanitized `SecurityEvent` audit logs.
 - **React Dashboard**: Modern, responsive control plane UI using Vite, React, TailwindCSS, and Recharts.
 
 ## Architecture

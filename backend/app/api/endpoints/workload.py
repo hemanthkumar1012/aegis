@@ -48,20 +48,62 @@ def create_credential(
     identity_id: int,
     current_user: User = Depends(deps.get_current_admin_user),
 ) -> Any:
+    from datetime import datetime, timedelta, timezone
+    from app.core.config import settings
+    from app.models.audit import SecurityEvent
+    
     identity = db.query(WorkloadIdentity).filter(WorkloadIdentity.id == identity_id).first()
     if not identity:
         raise HTTPException(status_code=404, detail="Identity not found")
+        
+    now = datetime.now(timezone.utc)
+    
+    # Revoke old active credentials (rotation semantics)
+    old_credentials = db.query(IdentityCredential).filter(
+        IdentityCredential.identity_id == identity.id,
+        IdentityCredential.is_active == True
+    ).all()
+    
+    for old_cred in old_credentials:
+        old_cred.is_active = False
+        old_cred.revoked_at = now
+        
+        # Audit revocation
+        evt = SecurityEvent(
+            event_type="CREDENTIAL_REVOKED",
+            severity="MEDIUM",
+            description=f"Credential {old_cred.client_id} rotated and revoked.",
+            source_identity=identity.name,
+            timestamp=now
+        )
+        db.add(evt)
     
     raw_secret = str(uuid.uuid4())
     client_id = f"aegis_{uuid.uuid4().hex[:16]}"
     hashed_secret = get_password_hash(raw_secret)
     
+    expires = now + timedelta(days=settings.CREDENTIAL_TTL_DAYS)
+    
     credential = IdentityCredential(
         identity_id=identity.id,
         client_id=client_id,
-        hashed_secret=hashed_secret
+        hashed_secret=hashed_secret,
+        is_active=True,
+        issued_at=now,
+        expires_at=expires
     )
     db.add(credential)
+    
+    # Audit creation
+    evt_create = SecurityEvent(
+        event_type="CREDENTIAL_CREATED",
+        severity="INFO",
+        description=f"New credential {client_id} created, expires {expires.isoformat()}.",
+        source_identity=identity.name,
+        timestamp=now
+    )
+    db.add(evt_create)
+    
     db.commit()
     db.refresh(credential)
     

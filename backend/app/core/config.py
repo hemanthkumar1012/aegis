@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     CORS_ORIGINS: List[str] = ["http://localhost:5173", "http://localhost:3000"]
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    CREDENTIAL_TTL_DAYS: int = 90
 
     @property
     def is_valid_secret(self) -> bool:
