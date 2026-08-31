@@ -14,21 +14,8 @@ from app.models.approval import ApprovalRequest
 router = APIRouter()
 
 from app.services.authorization import AuthorizationPipeline
+from app.core.tools import registry as tool_registry
 import json
-
-class ToolRegistry:
-    @staticmethod
-    def execute(tool_name: str, action: str, resource: str, parameters: dict) -> dict:
-        supported_tools = ["payment", "database", "customer", "ticket", "email", "deployment"]
-        if tool_name not in supported_tools:
-            return {"status": "FAILED", "result": f"Unknown tool: {tool_name}"}
-        
-        return {
-            "tool": tool_name,
-            "action": action,
-            "status": "SUCCESS",
-            "result": {"message": f"Simulated execution of {action} on {tool_name}"}
-        }
 
 @router.post("/execute")
 def execute_tool(
@@ -52,7 +39,12 @@ def execute_tool(
         parameters=request.parameters
     )
     
-    # Audit Logging
+    # Audit Logging - Mask secrets
+    safe_params = request.parameters.copy()
+    for k in safe_params.keys():
+        if any(sec in k.lower() for sec in ["secret", "password", "token", "key"]):
+            safe_params[k] = "***MASKED***"
+            
     audit_entry = AuditLog(
         request_id=req_id,
         identity_name=identity.name,
@@ -62,7 +54,7 @@ def execute_tool(
         decision=result["decision"],
         policy_applied=result["policy_name"],
         risk_score=result["risk_score"],
-        request_metadata=request.parameters
+        request_metadata=safe_params
     )
     db.add(audit_entry)
     db.commit()
@@ -86,7 +78,7 @@ def execute_tool(
         return {"decision": "REQUIRE_APPROVAL", "reason": result["reason"], "request_id": req_id}
         
     elif result["decision"] == "ALLOW":
-        execution_result = ToolRegistry.execute(request.tool, request.action, request.resource, request.parameters)
+        execution_result = tool_registry.execute(request.tool, request.action, request.resource, request.parameters)
         
         # We should also log the execution outcome securely
         # For simplicity, we just return it to the caller

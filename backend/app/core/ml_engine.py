@@ -15,26 +15,51 @@ class MLEngine:
             AuditLog.identity_name == identity_name,
             AuditLog.timestamp >= start_time,
             AuditLog.timestamp < end_time
-        ).all()
+        ).order_by(AuditLog.timestamp.asc()).all()
         
         if not logs:
             return None
             
         df = pd.DataFrame([{
             "tool": log.tool,
+            "action": log.action,
             "resource": log.resource,
-            "decision": log.decision
+            "decision": log.decision,
+            "timestamp": log.timestamp
         } for log in logs])
         
         request_count = len(df)
         denied_count = len(df[df["decision"] == "DENY"])
+        
+        # Calculate inter-request seconds
+        if request_count > 1:
+            diffs = df["timestamp"].diff().dt.total_seconds().dropna()
+            mean_inter_request = diffs.mean()
+            # Burst: number of requests that happened within 1 second of previous
+            burst_count = len(diffs[diffs < 1.0])
+        else:
+            mean_inter_request = 300.0 # max window size
+            burst_count = 0
+            
+        # Sensitive actions (arbitrary definition for baseline: delete/drop or payment tool)
+        sensitive_count = len(df[
+            df["action"].str.lower().isin(["delete", "drop", "truncate"]) | 
+            (df["tool"] == "payment")
+        ])
+        
+        # After hours: assuming 9 to 5 UTC is normal
+        after_hours_count = len(df[~df["timestamp"].dt.hour.between(9, 17)])
         
         return {
             "request_count": request_count,
             "requests_per_minute": request_count / 5.0, # 5 min window
             "unique_tools": df["tool"].nunique(),
             "unique_resources": df["resource"].nunique(),
-            "denied_rate": denied_count / request_count if request_count > 0 else 0
+            "denied_rate": denied_count / request_count if request_count > 0 else 0,
+            "sensitive_action_rate": sensitive_count / request_count if request_count > 0 else 0,
+            "burst_count": burst_count,
+            "after_hours_rate": after_hours_count / request_count if request_count > 0 else 0,
+            "mean_inter_request_seconds": mean_inter_request
         }
 
     def _build_training_data(self) -> pd.DataFrame:

@@ -32,7 +32,8 @@ def setup_test_data(db_session):
         db_session.add(perm)
         db_session.commit()
         
-    role.permissions.append(perm)
+    if perm not in role.permissions:
+        role.permissions.append(perm)
     db_session.commit()
 
     # Setup test identity
@@ -89,3 +90,58 @@ def test_gateway_allow(setup_test_data):
     assert response.status_code == 200
     assert response.json()["decision"] == "ALLOW"
 
+def test_gateway_unknown_tool(setup_test_data):
+    creds = setup_test_data
+    db_session = SessionLocal()
+    from app.models.user import Permission
+    from app.models.workload import WorkloadIdentity
+    
+    identity = db_session.query(WorkloadIdentity).filter_by(name=creds["client_name"]).first()
+    perm = db_session.query(Permission).filter_by(name="unknown_tool.read").first()
+    if not perm:
+        perm = Permission(name="unknown_tool.read")
+        db_session.add(perm)
+        db_session.commit()
+    if perm not in identity.role.permissions:
+        identity.role.permissions.append(perm)
+        db_session.commit()
+    
+    from app.models.policy import Policy
+    pol = Policy(name="test-allow-unknown", effect="ALLOW", priority=100, conditions={"tool": "unknown_tool", "action": "read"})
+    db_session.add(pol)
+    db_session.commit()
+    
+    response = client.post(
+        "/api/v1/gateway/execute",
+        headers={"x-client-id": creds["client_id_header"], "x-client-secret": creds["client_secret"]},
+        json={"identity": creds["client_name"], "tool": "unknown_tool", "action": "read", "resource": "res1"}
+    )
+    
+    assert response.status_code == 200
+    assert response.json()["decision"] == "ALLOW"
+    assert response.json()["execution"]["status"] == "FAILED"
+    
+    db_session.delete(pol)
+    db_session.commit()
+    db_session.close()
+
+def test_gateway_hard_deny(setup_test_data):
+    creds = setup_test_data
+    db_session = SessionLocal()
+    from app.models.policy import Policy
+    pol_deny = Policy(name="test-deny-read", effect="DENY", priority=50, conditions={"tool": "database", "action": "read", "resource": "forbidden_db"})
+    db_session.add(pol_deny)
+    db_session.commit()
+    
+    response = client.post(
+        "/api/v1/gateway/execute",
+        headers={"x-client-id": creds["client_id_header"], "x-client-secret": creds["client_secret"]},
+        json={"identity": creds["client_name"], "tool": "database", "action": "read", "resource": "forbidden_db"}
+    )
+    
+    assert response.status_code == 403
+    assert "DENY" in response.json()["detail"]["decision"]
+    
+    db_session.delete(pol_deny)
+    db_session.commit()
+    db_session.close()

@@ -26,18 +26,20 @@ def test_abac_amount_threshold():
     engine = PolicyEngine(db)
     
     # Add a temporary policy
-    pol = Policy(name="test-amount", effect="ALLOW", priority=500, conditions={"max_amount": 500, "tool": "payment"})
-    db.add(pol)
-    db.commit()
+    pol = db.query(Policy).filter_by(name="test-amount").first()
+    if not pol:
+        pol = Policy(name="test-amount", effect="ALLOW", priority=500, conditions={"max_amount": 500, "tool": "payment_test"})
+        db.add(pol)
+        db.commit()
     
     identity = WorkloadIdentity(name="test-identity", status="ACTIVE")
     
     # Below threshold
-    decision = engine.evaluate(identity, "payment", "refund", "res", {"amount": 400})
+    decision = engine.evaluate(identity, "payment_test", "refund", "res", {"amount": 400})
     assert decision.effect == "ALLOW"
     
     # Above threshold -> should fall through to default DENY since no other policy matches
-    decision2 = engine.evaluate(identity, "payment", "refund", "res", {"amount": 600})
+    decision2 = engine.evaluate(identity, "payment_test", "refund", "res", {"amount": 600})
     assert decision2.effect == "DENY"
     
     db.delete(pol)

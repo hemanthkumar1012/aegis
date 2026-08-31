@@ -34,11 +34,14 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['permission_id'], ['permission.id'], ),
     sa.ForeignKeyConstraint(['role_id'], ['role.id'], )
     )
-    op.add_column('identity_credential', sa.Column('client_id', sa.String(), nullable=False))
-    op.add_column('identity_credential', sa.Column('expires_at', sa.DateTime(timezone=True), nullable=True))
-    op.create_index(op.f('ix_identity_credential_client_id'), 'identity_credential', ['client_id'], unique=True)
-    op.add_column('workload_identity', sa.Column('role_id', sa.Integer(), nullable=True))
-    op.create_foreign_key(None, 'workload_identity', 'role', ['role_id'], ['id'])
+    with op.batch_alter_table('identity_credential') as batch_op:
+        batch_op.add_column(sa.Column('client_id', sa.String(), nullable=True))
+        batch_op.add_column(sa.Column('expires_at', sa.DateTime(timezone=True), nullable=True))
+        batch_op.create_index(batch_op.f('ix_identity_credential_client_id'), ['client_id'], unique=True)
+        
+    with op.batch_alter_table('workload_identity') as batch_op:
+        batch_op.add_column(sa.Column('role_id', sa.Integer(), nullable=True))
+        batch_op.create_foreign_key('fk_workload_identity_role_id', 'role', ['role_id'], ['id'])
     # ### end Alembic commands ###
 
 

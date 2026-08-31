@@ -22,12 +22,12 @@ class AuthorizationPipeline:
         Check if the identity's role has the required permission: tool.action
         """
         if not identity.role:
+            print("RBAC FAIL: No role")
             return False
         required_perm = f"{tool}.{action}"
-        for perm in identity.role.permissions:
-            if perm.name == required_perm:
-                return True
-        return False
+        perms = [p.name for p in identity.role.permissions]
+        print(f"RBAC CHECK: required={required_perm}, has={perms}")
+        return required_perm in perms
 
     def evaluate(self, identity: WorkloadIdentity, tool: str, action: str, resource: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -75,7 +75,7 @@ class AuthorizationPipeline:
         
         # 8. ML Anomaly Signal (0 - 100)
         ml_eval = self.ml_engine.detect_anomaly(identity.name)
-        anomaly_score = 100.0 if ml_eval.get("is_anomaly") else 0.0 # Will refactor ML engine to return 0-100 next
+        anomaly_score = ml_eval.get("score", 0.0)
         
         # Determine final effect
         final_effect = policy_decision.effect

@@ -20,7 +20,7 @@ class PolicyBase(BaseModel):
         if not isinstance(v, dict):
             raise ValueError("Conditions must be a dictionary")
         # Validate safe fields
-        allowed_keys = {"identity", "role", "tool", "action", "resource", "environment", "max_amount", "min_trust_level", "time_start", "time_end", "ip_range"}
+        allowed_keys = {"identity", "role", "tool", "action", "resource", "environment", "max_amount", "min_amount", "min_trust_level", "time_start", "time_end", "ip_range"}
         for key in v.keys():
             if key not in allowed_keys:
                 raise ValueError(f"Unsupported condition key: {key}")

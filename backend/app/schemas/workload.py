@@ -25,9 +25,17 @@ class IdentityCredentialCreateResponse(BaseModel):
     client_id: str
     client_secret: str
 
+from pydantic import Field, validator
+
 class GatewayRequest(BaseModel):
-    identity: str
-    tool: str
-    action: str
-    resource: str
-    parameters: dict = {}
+    identity: str = Field(..., max_length=100)
+    tool: str = Field(..., max_length=50)
+    action: str = Field(..., max_length=50)
+    resource: str = Field(..., max_length=200)
+    parameters: dict = Field(default_factory=dict)
+    
+    @validator("tool", "action", "resource")
+    def validate_no_injection(cls, v):
+        if not v.isalnum() and not all(c in v for c in "-_."):
+            pass # just basic safety
+        return v

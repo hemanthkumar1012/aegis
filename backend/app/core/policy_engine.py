@@ -17,16 +17,36 @@ class PolicyEngine:
         if identity.status != "ACTIVE":
             return PolicyDecision("DENY", "Identity is suspended")
             
-        policies = self.db.query(Policy).filter(Policy.is_enabled == True).order_by(Policy.priority.desc()).all()
+        policies = self.db.query(Policy).filter(Policy.is_enabled == True).all()
         
-        # Default decision
-        decision = PolicyDecision("DENY", "No matching policy found", "default-deny")
-        
+        matching_policies = []
         for policy in policies:
             if self._matches(policy, identity, tool, action, resource, parameters):
-                return PolicyDecision(policy.effect, f"Matched policy {policy.name}", policy.name)
+                matching_policies.append(policy)
                 
-        return decision
+        if not matching_policies:
+            return PolicyDecision("DENY", "No matching policy found", "default-deny")
+            
+        # Precedence 1: Explicit hard DENY
+        for p in matching_policies:
+            if p.effect == "DENY":
+                return PolicyDecision("DENY", f"Explicit DENY matched policy {p.name}", p.name)
+                
+        # Precedence 2: Explicit REQUIRE_APPROVAL
+        # If there are multiple, we pick the one with highest priority to log, but the effect is the same.
+        require_approval_policies = [p for p in matching_policies if p.effect == "REQUIRE_APPROVAL"]
+        if require_approval_policies:
+            p = sorted(require_approval_policies, key=lambda x: x.priority, reverse=True)[0]
+            return PolicyDecision("REQUIRE_APPROVAL", f"REQUIRE_APPROVAL matched policy {p.name}", p.name)
+            
+        # Precedence 3: Specific ALLOW
+        allow_policies = [p for p in matching_policies if p.effect == "ALLOW"]
+        if allow_policies:
+            p = sorted(allow_policies, key=lambda x: x.priority, reverse=True)[0]
+            return PolicyDecision("ALLOW", f"ALLOW matched policy {p.name}", p.name)
+            
+        # Precedence 4: Fallback
+        return PolicyDecision("DENY", "Fallback to default deny", "default-deny")
         
     def _matches(self, policy: Policy, identity: WorkloadIdentity, tool: str, action: str, resource: str, parameters: dict) -> bool:
         conds = policy.conditions
@@ -44,6 +64,13 @@ class PolicyEngine:
         if "max_amount" in conds and "amount" in parameters:
             try:
                 if float(parameters["amount"]) > float(conds["max_amount"]):
+                    return False
+            except ValueError:
+                return False
+                
+        if "min_amount" in conds and "amount" in parameters:
+            try:
+                if float(parameters["amount"]) < float(conds["min_amount"]):
                     return False
             except ValueError:
                 return False
