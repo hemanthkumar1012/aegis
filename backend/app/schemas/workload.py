@@ -24,7 +24,15 @@ class IdentityCredentialCreateResponse(BaseModel):
     client_id: str
     client_secret: str
 
-from pydantic import Field, field_validator
+import re
+from pydantic import Field, field_validator, ValidationInfo
+
+IDENTIFIER_REGEX = re.compile(r"\A[A-Za-z0-9._-]+\Z")
+
+def validate_identifier(value: str, field_name: str) -> str:
+    if not IDENTIFIER_REGEX.match(value):
+        raise ValueError(f"Invalid identifier for {field_name}. Must contain only alphanumeric characters, dots, underscores, and hyphens.")
+    return value
 
 class GatewayRequest(BaseModel):
     identity: str = Field(..., max_length=100)
@@ -33,9 +41,7 @@ class GatewayRequest(BaseModel):
     resource: str = Field(..., max_length=200)
     parameters: dict = Field(default_factory=dict)
     
-    @field_validator("tool", "action", "resource")
+    @field_validator("identity", "tool", "action", "resource")
     @classmethod
-    def validate_no_injection(cls, v):
-        if not v.isalnum() and not all(c in v for c in "-_."):
-            pass # just basic safety
-        return v
+    def validate_no_injection(cls, v: str, info: ValidationInfo) -> str:
+        return validate_identifier(v, info.field_name or "field")

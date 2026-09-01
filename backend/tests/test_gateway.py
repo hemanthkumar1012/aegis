@@ -157,3 +157,73 @@ def test_gateway_unknown_action(client, db_session, setup_test_data):
     assert "Unknown action 'fake_action'" in response.json()["detail"]["reason"]
     
     
+def test_gateway_malformed_input(client, setup_test_data):
+    creds = setup_test_data
+    # tool = "payment/drop"
+    response = client.post(
+        "/api/v1/gateway/execute",
+        headers={"x-client-id": creds["client_id_header"], "x-client-secret": creds["client_secret"]},
+        json={"identity": creds["client_name"], "tool": "payment/drop", "action": "read", "resource": "res1"}
+    )
+    assert response.status_code == 422
+    
+    # action = "refund\n"
+    response = client.post(
+        "/api/v1/gateway/execute",
+        headers={"x-client-id": creds["client_id_header"], "x-client-secret": creds["client_secret"]},
+        json={"identity": creds["client_name"], "tool": "payment", "action": "refund\n", "resource": "res1"}
+    )
+    assert response.status_code == 422
+
+    # resource = "abc\tdef"
+    response = client.post(
+        "/api/v1/gateway/execute",
+        headers={"x-client-id": creds["client_id_header"], "x-client-secret": creds["client_secret"]},
+        json={"identity": creds["client_name"], "tool": "payment", "action": "refund", "resource": "abc\tdef"}
+    )
+    assert response.status_code == 422
+
+    # identity = "finance/service"
+    response = client.post(
+        "/api/v1/gateway/execute",
+        headers={"x-client-id": creds["client_id_header"], "x-client-secret": creds["client_secret"]},
+        json={"identity": "finance/service", "tool": "payment", "action": "refund", "resource": "res1"}
+    )
+    assert response.status_code == 422
+
+    # null bytes
+    response = client.post(
+        "/api/v1/gateway/execute",
+        headers={"x-client-id": creds["client_id_header"], "x-client-secret": creds["client_secret"]},
+        json={"identity": creds["client_name"], "tool": "payment\x00", "action": "refund", "resource": "res1"}
+    )
+    assert response.status_code == 422
+
+    # quoted strings
+    response = client.post(
+        "/api/v1/gateway/execute",
+        headers={"x-client-id": creds["client_id_header"], "x-client-secret": creds["client_secret"]},
+        json={"identity": creds["client_name"], "tool": '"payment"', "action": "refund", "resource": "res1"}
+    )
+    assert response.status_code == 422
+
+    # shell-like metacharacters
+    response = client.post(
+        "/api/v1/gateway/execute",
+        headers={"x-client-id": creds["client_id_header"], "x-client-secret": creds["client_secret"]},
+        json={"identity": creds["client_name"], "tool": "payment; rm -rf /", "action": "refund", "resource": "res1"}
+    )
+    assert response.status_code == 422
+
+def test_gateway_valid_identifiers(client, setup_test_data):
+    creds = setup_test_data
+    
+    valid_tools = ["payment", "payment_refund", "payment.refund", "deployment-v2", "customer_123"]
+    for t in valid_tools:
+        response = client.post(
+            "/api/v1/gateway/execute",
+            headers={"x-client-id": creds["client_id_header"], "x-client-secret": creds["client_secret"]},
+            json={"identity": creds["client_name"], "tool": t, "action": "read", "resource": "res1"}
+        )
+        assert response.status_code != 422
+
